@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Record Management</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 960px; margin: 30px auto; padding: 20px; background: #f4f6f8; color: #222; }
+  h1 { text-align: center; margin: 0 0 24px; }
+  h2 { margin-top: 0; font-size: 18px; }
+  .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  form input, form button { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; }
+  form button { grid-column: span 2; background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+  form button:hover { background: #1d4ed8; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+  th { background: #f9fafb; font-weight: 600; }
+  .marks-input { width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; }
+  .del-btn { background: #dc2626; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px; }
+  .del-btn:hover { background: #b91c1c; }
+  .msg { padding: 10px; margin-bottom: 12px; border-radius: 4px; display: none; font-size: 14px; }
+  .msg.error { background: #fee2e2; color: #991b1b; display: block; }
+  .msg.success { background: #dcfce7; color: #166534; display: block; }
+  .empty { text-align: center; color: #888; padding: 20px; }
+</style>
+</head>
+<body>
+  <h1>Student Record Management</h1>
+
+  <div class="card">
+    <h2>Add Student</h2>
+    <div id="msg" class="msg"></div>
+    <form id="add-form">
+      <input name="name" placeholder="Name" required>
+      <input name="rollNumber" placeholder="Roll Number" required>
+      <input name="branch" placeholder="Branch (e.g. CSE)">
+      <input name="marks" type="number" min="0" max="100" placeholder="Marks (0-100)">
+      <button type="submit">Add Student</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>All Students</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Roll No</th>
+          <th>Branch</th>
+          <th>Marks</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="student-rows">
+        <tr><td colspan="5" class="empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+<script>
+const API = '/api/students';
+const rowsEl = document.getElementById('student-rows');
+const form = document.getElementById('add-form');
+const msg = document.getElementById('msg');
+
+function showMsg(text, type) {
+  msg.textContent = text;
+  msg.className = 'msg ' + type;
+  setTimeout(() => { msg.className = 'msg'; msg.textContent = ''; }, 2500);
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadStudents() {
+  try {
+    const res = await fetch(API);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      rowsEl.innerHTML = '<tr><td colspan="5" class="empty">No students yet. Add one above.</td></tr>';
+      return;
+    }
+    rowsEl.innerHTML = data.map(s => `
+      <tr>
+        <td>${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.rollNumber)}</td>
+        <td>${escapeHtml(s.branch || '-')}</td>
+        <td><input type="number" min="0" max="100" class="marks-input" value="${s.marks ?? ''}" data-id="${s._id}"></td>
+        <td><button class="del-btn" data-id="${s._id}">Delete</button></td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    showMsg('Failed to load students', 'error');
+  }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const body = Object.fromEntries(fd.entries());
+  if (body.marks === '') delete body.marks;
+  else body.marks = Number(body.marks);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to add');
+    form.reset();
+    showMsg('Student added', 'success');
+    loadStudents();
+  } catch (err) {
+    showMsg(err.message, 'error');
+  }
+});
+
+rowsEl.addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('del-btn')) return;
+  if (!confirm('Delete this student?')) return;
+  const id = e.target.dataset.id;
+  try {
+    const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json();
+      throw new Error(d.error || 'Delete failed');
+    }
+    showMsg('Student deleted', 'success');
+    loadStudents();
+  } catch (err) {
+    showMsg(err.message, 'error');
+  }
+});
+
+rowsEl.addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('marks-input')) return;
+  const id = e.target.dataset.id;
+  const marks = e.target.value === '' ? null : Number(e.target.value);
+  try {
+    const res = await fetch(`${API}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marks })
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      throw new Error(d.error || 'Update failed');
+    }
+    showMsg('Marks updated', 'success');
+  } catch (err) {
+    showMsg(err.message, 'error');
+    loadStudents();
+  }
+});
+
+loadStudents();
+</script>
+</body>
+</html>
