@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Record Management</title>
+</head>
+<body>
+  <h1>Student Record Management System</h1>
+
+  <form id="studentForm">
+    <input type="text" id="name" placeholder="Name" required />
+    <input type="text" id="rollNumber" placeholder="Roll Number" required />
+    <input type="text" id="branch" placeholder="Branch" />
+    <input type="number" id="marks" placeholder="Marks" min="0" max="100" />
+    <button type="submit">Add Student</button>
+  </form>
+
+  <h2>Students List</h2>
+  <table border="1" cellpadding="10">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Roll Number</th>
+        <th>Branch</th>
+        <th>Marks</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="studentList"></tbody>
+  </table>
+
+  <script>
+    const API_URL = "/api/students";
+
+    async function fetchStudents() {
+      const res = await fetch(API_URL);
+      const students = await res.json();
+
+      const studentList = document.getElementById("studentList");
+      studentList.innerHTML = "";
+
+      students.forEach(student => {
+        const row = document.createElement("tr");
+
+        row.innerHTML = `
+          <td>${student.name}</td>
+          <td>${student.rollNumber}</td>
+          <td>${student.branch || ""}</td>
+          <td>
+            <input type="number" value="${student.marks || 0}" 
+              onchange="updateMarks('${student._id}', this.value)" />
+          </td>
+          <td>
+            <button onclick="deleteStudent('${student._id}')">Delete</button>
+          </td>
+        `;
+
+        studentList.appendChild(row);
+      });
+    }
+
+    document.getElementById("studentForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const student = {
+        name: document.getElementById("name").value,
+        rollNumber: document.getElementById("rollNumber").value,
+        branch: document.getElementById("branch").value,
+        marks: Number(document.getElementById("marks").value),
+      };
+
+      await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(student),
+      });
+
+      document.getElementById("studentForm").reset();
+      fetchStudents();
+    });
+
+    async function deleteStudent(id) {
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+      });
+
+      fetchStudents();
+    }
+
+    async function updateMarks(id, marks) {
+      await fetch(`${API_URL}/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ marks: Number(marks) }),
+      });
+
+      fetchStudents();
+    }
+
+    fetchStudents();
+  </script>
+</body>
+</html>
